@@ -1,0 +1,27 @@
+# 构建产物
+build/
+*.exe
+*.o
+*.obj
+*.a
+*.dll
+*.lib
+*.pdb
+*.ilk
+
+# CMake 生成文件
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CMakeUserPresets.json
+Makefile
+
+# 程序运行时产生的数据
+tasks.txt
+test_tasks.txt
+test_bad.txt
+
+# 系统 / 编辑器
+Thumbs.db
+desktop.ini
+*.log

@@ -1,0 +1,42 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "生成 task_cli",
+            "type": "shell",
+            "command": "${workspaceFolder}\\poject\\build.bat",
+            "args": ["cli"],
+            "options": {
+                "cwd": "${workspaceFolder}\\poject"
+            },
+            "problemMatcher": ["$gcc"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "编译任务管理 CLI 程序到 poject\\build\\task_cli.exe"
+        },
+        {
+            "label": "生成 task_tests",
+            "type": "shell",
+            "command": "${workspaceFolder}\\poject\\build.bat",
+            "args": ["tests"],
+            "options": {
+                "cwd": "${workspaceFolder}\\poject"
+            },
+            "problemMatcher": ["$gcc"],
+            "group": "build",
+            "detail": "编译测试程序到 poject\\build\\task_tests.exe"
+        },
+        {
+            "label": "生成并运行测试",
+            "type": "shell",
+            "command": "${workspaceFolder}\\poject\\build.bat",
+            "args": ["test"],
+            "options": {
+                "cwd": "${workspaceFolder}\\poject"
+            },
+            "problemMatcher": []
+        }
+    ]
+}
