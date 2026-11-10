@@ -30,7 +30,7 @@ void TaskManager::list() const {
         return;
     }
     for (const auto& task : tasks) {
-        std::cout << task.id << ". [" << (task.done ? "y" : " ") << "] " << task.title << "\n";
+        std::cout << task.id << ". [" << (task.done ? "yes" : " ") << "] " << task.title << "\n";
     }
 }
 
