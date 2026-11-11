@@ -1,0 +1,12 @@
+Enter command (add/list/sort/search/done/remove/load/save/help/exit): Set priority? [y/N]: Priority (高/中/低, default 中): Added: 高 - 交报告
+Enter command (add/list/sort/search/done/remove/load/save/help/exit): Set priority? [y/N]: Added: 中 - 买牛奶
+Enter command (add/list/sort/search/done/remove/load/save/help/exit): Added: 低 - 写代码
+Enter command (add/list/sort/search/done/remove/load/save/help/exit): Set priority? [y/N]: Priority (高/中/低, default 中): Added: 高 - 修 bug
+Enter command (add/list/sort/search/done/remove/load/save/help/exit): Set priority? [y/N]: Priority (高/中/低, default 中): Unknown priority, using 中.
+Added: 中 - 坏输入
+Enter command (add/list/sort/search/done/remove/load/save/help/exit): 1. [ ] 高 - 交报告
+2. [ ] 中 - 买牛奶
+3. [ ] 低 - 写代码
+4. [ ] 高 - 修 bug
+5. [ ] 中 - 坏输入
+Enter command (add/list/sort/search/done/remove/load/save/help/exit): 

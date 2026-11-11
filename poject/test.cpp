@@ -85,6 +85,20 @@ int main() {
     check(!missing.load("no_such_file.txt"), "load reports a missing file");
     check(missing.empty(), "failed load leaves the list empty");
 
+    // 修改优先级 / 截止日期
+    TaskManager edit;
+    check(edit.add("甲", Priority::Low, "2026-03-03"), "add a task to edit");
+    check(edit.setPriority(1, Priority::High), "setPriority changes an existing task");
+    check(!edit.setPriority(99, Priority::High), "setPriority rejects an unknown id");
+    check(edit.sorted(SortMode::Priority)[0].priority == Priority::High, "changed priority affects sorting");
+    check(edit.setDue(1, "2026-09-09"), "setDue sets a date");
+    check(!edit.setDue(1, "2026-13-01"), "setDue rejects an invalid date");
+    check(edit.setDue(1, ""), "setDue can clear the date");
+    check(edit.sorted(SortMode::Id)[0].due.empty(), "cleared date is really empty");
+    check(!edit.setDue(99, "2026-09-09"), "setDue rejects an unknown id");
+    check(edit.contains(1) && !edit.contains(99), "contains reports membership");
+    check(edit.show(1) && !edit.show(99), "show prints only existing tasks");
+
     std::remove(file.c_str());
     std::remove(legacy.c_str());
 

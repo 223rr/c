@@ -27,6 +27,12 @@ public:
     std::size_t search(const std::string& keyword) const;
     bool markDone(int id);
     bool remove(int id);
+    bool setPriority(int id, Priority priority);
+    // due 为空表示清除截止日期；日期非法或 id 不存在时返回 false。
+    bool setDue(int id, const std::string& due);
+    bool contains(int id) const;
+    // 打印单个任务，id 不存在时返回 false。
+    bool show(int id) const;
     bool load(const std::string& path);
     bool save(const std::string& path) const;
 

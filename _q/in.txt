@@ -1,0 +1,14 @@
+add 交报告
+y
+高
+add 买牛奶
+n
+add -p 低 写代码
+add 修 bug
+y
+1
+add 坏输入
+y
+很高
+list
+exit

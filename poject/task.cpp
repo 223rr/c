@@ -191,6 +191,44 @@ bool TaskManager::remove(int id) {
     return false;
 }
 
+bool TaskManager::setPriority(int id, Priority priority) {
+    for (auto& task : tasks) {
+        if (task.id == id) {
+            task.priority = priority;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TaskManager::setDue(int id, const std::string& due) {
+    if (!due.empty() && !isValidDate(due)) return false;
+    for (auto& task : tasks) {
+        if (task.id == id) {
+            task.due = due;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TaskManager::contains(int id) const {
+    for (const Task& task : tasks) {
+        if (task.id == id) return true;
+    }
+    return false;
+}
+
+bool TaskManager::show(int id) const {
+    for (const Task& task : tasks) {
+        if (task.id == id) {
+            std::cout << formatTask(task) << "\n";
+            return true;
+        }
+    }
+    return false;
+}
+
 bool TaskManager::load(const std::string& path) {
     std::ifstream in(path);
     if (!in) return false;
