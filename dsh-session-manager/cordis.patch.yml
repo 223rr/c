@@ -1,0 +1,6 @@
+# Bundle patch: the row loads this package's main entry as the Host half
+# (a plain Cordis plugin), while `dsh.client` makes the Web app load
+# ./client as the browser half that registers the sidebar entry and panel.
+- insert:
+    - id: session-manager
+      name: dsh-session-manager
