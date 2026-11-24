@@ -2,6 +2,7 @@
 setlocal
 set "GPP=C:\Users\is\Desktop\p3\mingw64\mingw64\bin\g++.exe"
 set "ROOT=%~dp0"
+set "FLAGS=-std=c++17 -Wall -Wextra -g -static"
 
 if exist "%GPP%" goto have_gpp
 echo [build] cannot find compiler: %GPP%
@@ -16,15 +17,15 @@ echo Usage: build.bat cli ^| tests ^| test
 exit /b 2
 
 :build_cli
-"%GPP%" -std=c++17 -Wall -Wextra -g "%ROOT%main.cpp" "%ROOT%task.cpp" -o "%ROOT%build\task_cli.exe"
+"%GPP%" %FLAGS% "%ROOT%main.cpp" "%ROOT%task.cpp" -o "%ROOT%build\task_cli.exe"
 exit /b %ERRORLEVEL%
 
 :build_tests
-"%GPP%" -std=c++17 -Wall -Wextra -g "%ROOT%test.cpp" "%ROOT%task.cpp" -o "%ROOT%build\task_tests.exe"
+"%GPP%" %FLAGS% "%ROOT%test.cpp" "%ROOT%task.cpp" -o "%ROOT%build\task_tests.exe"
 exit /b %ERRORLEVEL%
 
 :build_and_run
-"%GPP%" -std=c++17 -Wall -Wextra -g "%ROOT%test.cpp" "%ROOT%task.cpp" -o "%ROOT%build\task_tests.exe"
+"%GPP%" %FLAGS% "%ROOT%test.cpp" "%ROOT%task.cpp" -o "%ROOT%build\task_tests.exe"
 if errorlevel 1 exit /b 1
 call "%ROOT%build\task_tests.exe"
 exit /b %ERRORLEVEL%

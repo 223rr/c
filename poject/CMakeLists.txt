@@ -10,6 +10,10 @@ if(MSVC)
     target_compile_options(task_core PRIVATE /W4)
 else()
     target_compile_options(task_core PRIVATE -Wall -Wextra -Wpedantic)
+    # 静态链接 libstdc++/libgcc，生成的 exe 换一台机器也能直接运行
+    if(WIN32)
+        add_link_options(-static)
+    endif()
 endif()
 
 add_executable(task_cli main.cpp)
