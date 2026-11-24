@@ -1,4 +1,4 @@
-# 生成发布包：TaskJournal.exe / 便携版 zip / 安装包
+﻿# 生成发布包：TaskJournal.exe / 便携版 zip / 安装包
 # 用法： powershell -ExecutionPolicy Bypass -File dist\build-release.ps1
 $ErrorActionPreference = 'Stop'
 

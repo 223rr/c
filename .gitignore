@@ -25,3 +25,5 @@ test_bad.txt
 Thumbs.db
 desktop.ini
 *.log
+
+dist/package/

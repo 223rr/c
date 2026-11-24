@@ -449,8 +449,9 @@ const char kIndexHtml[] = R"HTML(<<!DOCTYPE html>
     box-shadow: 0 30px 60px -30px rgba(0, 0, 0, .8);
     padding: 34px 46px 28px;
     text-align: center;
-    transform: rotate(-.6deg);
+    transform: translate(var(--tx, 0px), var(--ty, 0px)) rotate(-.6deg);
     min-width: 300px;
+    cursor: grab;
   }
   .pomo-label { font-size: 14px; letter-spacing: .2em; color: var(--ink-soft); }
   .pomo-title { font-size: 17px; margin: 6px 0 14px; color: var(--ink); }
@@ -641,12 +642,19 @@ const char kIndexHtml[] = R"HTML(<<!DOCTYPE html>
     border: 1px solid #e3d8bd;
     box-shadow: 0 22px 46px -20px rgba(60, 48, 30, .75);
     padding: 26px 28px 20px;
-    transform: rotate(-.5deg);
+    /* 拖动时改 --tx/--ty 即可，旋转不变 */
+    transform: translate(var(--tx, 0px), var(--ty, 0px)) rotate(-.5deg);
     animation: pop .26s ease both;
   }
+  .modal h2 { cursor: grab; user-select: none; }
+  .dragging { cursor: grabbing; user-select: none; }
+  .dragging h2 { cursor: grabbing; }
   @keyframes pop {
-    from { opacity: 0; transform: translateY(-10px) rotate(-.5deg) scale(.97); }
-    to { opacity: 1; transform: rotate(-.5deg); }
+    from {
+      opacity: 0;
+      transform: translate(var(--tx, 0px), calc(var(--ty, 0px) - 10px)) rotate(-.5deg) scale(.97);
+    }
+    to { opacity: 1; transform: translate(var(--tx, 0px), var(--ty, 0px)) rotate(-.5deg); }
   }
   .modal h2 { margin: 0 0 2px; font-size: 21px; letter-spacing: .06em; color: var(--red); }
   .modal .hint { margin: 0 0 12px; font-size: 13px; color: var(--ink-soft); }
@@ -664,6 +672,11 @@ const char kIndexHtml[] = R"HTML(<<!DOCTYPE html>
     border: 0; border-radius: 3px;
     padding: 7px 22px 8px; cursor: pointer;
   }
+  .modal button.cancel {
+    background: transparent; color: var(--ink-soft);
+    border: 1px solid #cdbf9f; margin-right: 8px;
+  }
+  .modal button.cancel:hover { color: var(--red); border-color: var(--red); filter: none; }
 
   footer {
     text-align: center; color: #9d9179; font-size: 12px;
@@ -895,6 +908,7 @@ const char kIndexHtml[] = R"HTML(<<!DOCTYPE html>
     </div>
     <textarea id="reviewText" placeholder="今天感觉如何？记一句…"></textarea>
     <div class="actions-row">
+      <button type="button" class="cancel" id="reviewCancel">取消</button>
       <button type="button" id="reviewSave">保存</button>
     </div>
   </div>
@@ -1798,6 +1812,12 @@ const char kIndexHtml[] = R"HTML(<<!DOCTYPE html>
   }
 
   $("openReview").addEventListener("click", openReview);
+  $("reviewCancel").addEventListener("click", function () {
+    $("reviewModal").classList.remove("show");
+  });
+  $("reviewModal").addEventListener("click", function (event) {
+    if (event.target === this) this.classList.remove("show");
+  });
   $("reviewSave").addEventListener("click", function () {
     var date = lastStats ? lastStats.today : today();
     var text = $("reviewText").value.trim();
@@ -1843,6 +1863,12 @@ const char kIndexHtml[] = R"HTML(<<!DOCTYPE html>
   $("statsClose").addEventListener("click", function () {
     $("statsModal").classList.remove("show");
   });
+  $("statsModal").addEventListener("click", function (event) {
+    if (event.target === this) this.classList.remove("show");
+  });
+  $("pomo").addEventListener("click", function (event) {
+    if (event.target === this) closePomo();
+  });
 
   /* ---------- 提醒 ---------- */
   var reminded = false;
@@ -1872,7 +1898,14 @@ const char kIndexHtml[] = R"HTML(<<!DOCTYPE html>
     if (event.target === this) closeReminder();
   });
   document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape") { closeReminder(); closeDrawer(); closeTrash(); closeTags(); }
+    if (event.key !== "Escape") return;
+    closeReminder();
+    closeDrawer();
+    closeTrash();
+    closeTags();
+    closePomo();
+    $("reviewModal").classList.remove("show");
+    $("statsModal").classList.remove("show");
   });
 
   /* ---------- 日期样式 ---------- */
@@ -1883,6 +1916,46 @@ const char kIndexHtml[] = R"HTML(<<!DOCTYPE html>
     var input = $(id);
     input.addEventListener("input", function () { syncDateStyle(input); });
     input.addEventListener("change", function () { syncDateStyle(input); });
+  });
+
+  /* ---------- 弹窗拖动 ---------- */
+  function makeDraggable(card) {
+    if (!card) return;
+    var drag = { on: false, sx: 0, sy: 0, tx: 0, ty: 0 };
+
+    card.addEventListener("pointerdown", function (event) {
+      if (event.button !== 0) return;
+      if (event.target.closest("input, textarea, select, button, a, label")) return;
+      drag.on = true;
+      drag.sx = event.clientX;
+      drag.sy = event.clientY;
+      drag.tx = parseFloat(card.style.getPropertyValue("--tx")) || 0;
+      drag.ty = parseFloat(card.style.getPropertyValue("--ty")) || 0;
+      card.classList.add("dragging");
+      try { card.setPointerCapture(event.pointerId); } catch (err) {}
+      event.preventDefault();
+    });
+
+    card.addEventListener("pointermove", function (event) {
+      if (!drag.on) return;
+      card.style.setProperty("--tx", (drag.tx + event.clientX - drag.sx) + "px");
+      card.style.setProperty("--ty", (drag.ty + event.clientY - drag.sy) + "px");
+    });
+
+    function stop(event) {
+      if (!drag.on) return;
+      drag.on = false;
+      card.classList.remove("dragging");
+      try { card.releasePointerCapture(event.pointerId); } catch (err) {}
+    }
+    card.addEventListener("pointerup", stop);
+    card.addEventListener("pointercancel", stop);
+  }
+
+  ["reminder", "reviewModal", "statsModal", "pomo"].forEach(function (id) {
+    var box = $(id);
+    if (!box) return;
+    makeDraggable(box.querySelector(".modal") || box.querySelector(".pomo-card"));
   });
 
   var now = new Date();
