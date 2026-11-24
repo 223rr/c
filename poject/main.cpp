@@ -43,12 +43,14 @@ std::string defaultDataPath(const char* argv0) {
     return exe.substr(0, slash + 1) + kDataFileName;
 }
 
-// 解析 "add -p 高 -d 2026-05-01 写报告" 这类参数，标题保留原始空格。
-// hasPriority / hasDue 说明命令行里是否已经用 -p / -d 指定过。
+// 解析 "add -p 高 -d 2026-05-01 -t 2026-05-10 写报告" 这类参数，标题保留原始空格。
+// hasPriority / hasDue / hasTarget 说明命令行里是否已经指定过对应字段。
 bool parseAddArgs(const std::string& text, bool& hasPriority, Priority& priority,
-                  bool& hasDue, std::string& due, std::string& title, std::string& error) {
+                  bool& hasDue, std::string& due, bool& hasTarget, std::string& target,
+                  std::string& title, std::string& error) {
     hasPriority = false;
     hasDue = false;
+    hasTarget = false;
     std::size_t pos = 0;
     while (true) {
         skipSpaces(text, pos);
@@ -79,6 +81,21 @@ bool parseAddArgs(const std::string& text, bool& hasPriority, Priority& priority
             }
             continue;
         }
+        if (text.compare(pos, 2, "-t") == 0) {
+            pos += 2;
+            const std::string value = takeWord(text, pos);
+            if (value == "-") {
+                hasTarget = true;
+                target.clear(); // "-" 表示不要目标完成日
+            } else if (isValidDate(value)) {
+                hasTarget = true;
+                target = value;
+            } else {
+                error = "invalid target date (expected YYYY-MM-DD or -): " + value;
+                return false;
+            }
+            continue;
+        }
         break;
     }
     title = text.substr(pos);
@@ -100,9 +117,10 @@ std::string todayString() {
     return buffer;
 }
 
-// 解析 "pri 2 高 -d 2026-06-01"：至少给出优先级或截止日期之一。
+// 解析 "pri 2 高 -d 2026-06-01 -t 2026-06-10"：至少给出优先级或某个日期。
 bool parseUpdateArgs(const std::string& text, int& id, bool& hasPriority, Priority& priority,
-                     bool& hasDue, std::string& due, std::string& error) {
+                     bool& hasDue, std::string& due, bool& hasTarget, std::string& target,
+                     std::string& error) {
     std::size_t pos = 0;
     const std::string idText = takeWord(text, pos);
     if (!parseId(idText, id)) {
@@ -112,6 +130,7 @@ bool parseUpdateArgs(const std::string& text, int& id, bool& hasPriority, Priori
 
     hasPriority = false;
     hasDue = false;
+    hasTarget = false;
     while (true) {
         skipSpaces(text, pos);
         if (pos >= text.size()) break;
@@ -131,6 +150,21 @@ bool parseUpdateArgs(const std::string& text, int& id, bool& hasPriority, Priori
             }
             continue;
         }
+        if (text.compare(pos, 2, "-t") == 0) {
+            pos += 2;
+            const std::string value = takeWord(text, pos);
+            if (value == "-") {
+                hasTarget = true;
+                target.clear(); // "-" 表示清除目标完成日
+            } else if (isValidDate(value)) {
+                hasTarget = true;
+                target = value;
+            } else {
+                error = "invalid target date (expected YYYY-MM-DD or -): " + value;
+                return false;
+            }
+            continue;
+        }
 
         const std::string word = takeWord(text, pos);
         if (parsePriority(word, priority)) {
@@ -141,7 +175,7 @@ bool parseUpdateArgs(const std::string& text, int& id, bool& hasPriority, Priori
         return false;
     }
 
-    if (!hasPriority && !hasDue) {
+    if (!hasPriority && !hasDue && !hasTarget) {
         error = "nothing to update";
         return false;
     }
@@ -175,12 +209,13 @@ void saveTasks(const TaskManager& manager, const std::string& path) {
 
 void printUsage() {
     std::cout << "Commands:\n"
-                 "  add [-p 高|中|低] [-d YYYY-MM-DD|-] <标题>   add a task\n"
-                 "      (due date defaults to today when -d is omitted)\n"
+                 "  add [-p 高|中|低] [-d YYYY-MM-DD|-] [-t YYYY-MM-DD|-] <标题>   add a task\n"
+                 "      -d due date (defaults to today), -t target completion date\n"
                  "  list                         show tasks (sorted by current mode)\n"
                  "  sort <id|priority|date>      change sort mode\n"
                  "  search <关键字>               search titles\n"
-                 "  pri <id> [高|中|低] [-d YYYY-MM-DD|-]   change priority / due date\n"
+                 "  pri <id> [高|中|低] [-d YYYY-MM-DD|-] [-t YYYY-MM-DD|-]\n"
+                 "      change priority / due date / target completion date\n"
                  "  done <id>                    mark a task as done\n"
                  "  remove <id>                  delete a task\n"
                  "  load <file>                  switch to another data file\n"
@@ -216,15 +251,18 @@ int main(int argc, char* argv[]) {
         } else if (command == "help") {
             printUsage();
         } else if (command == "add") {
-            std::cout << "Usage: add [-p 高|中|低] [-d YYYY-MM-DD] <标题>\n";
+            std::cout << "Usage: add [-p 高|中|低] [-d YYYY-MM-DD] [-t YYYY-MM-DD] <标题>\n";
         } else if (command.rfind("add ", 0) == 0) {
             bool hasPriority = false;
             bool hasDue = false;
+            bool hasTarget = false;
             Priority priority = Priority::Medium;
             std::string due;
+            std::string target;
             std::string title;
             std::string error;
-            if (!parseAddArgs(command.substr(4), hasPriority, priority, hasDue, due, title, error)) {
+            if (!parseAddArgs(command.substr(4), hasPriority, priority, hasDue, due,
+                              hasTarget, target, title, error)) {
                 std::cout << "Add failed: " << error << "\n";
             } else if (title.empty() || title.find_first_not_of(" \t") == std::string::npos) {
                 std::cout << "Task title is empty.\n";
@@ -233,12 +271,16 @@ int main(int argc, char* argv[]) {
                     priority = askPriority();
                 }
                 if (!hasDue) due = todayString(); // 没给截止日期就取系统当天
-                if (!manager.add(title, priority, due)) {
+                if (!datesConsistent(due, target)) {
+                    std::cout << "Add failed: target completion date must not be later than the due date.\n";
+                } else if (!manager.add(title, priority, due, target)) {
                     std::cout << "Task title is empty.\n";
                 } else {
                     saveTasks(manager, dataPath);
-                    std::cout << "Added: " << priorityText(priority) << " "
-                              << (due.empty() ? "-" : due) << " " << title << "\n";
+                    std::cout << "Added: " << priorityText(priority)
+                              << " 目标 " << (target.empty() ? "-" : target)
+                              << " · 截止 " << (due.empty() ? "-" : due)
+                              << " " << title << "\n";
                 }
             }
         } else if (command == "sort") {
@@ -258,23 +300,43 @@ int main(int argc, char* argv[]) {
             const std::size_t found = manager.search(command.substr(7));
             std::cout << found << " match(es).\n";
         } else if (command == "pri") {
-            std::cout << "Usage: pri <id> [高|中|低] [-d YYYY-MM-DD|-]\n";
+            std::cout << "Usage: pri <id> [高|中|低] [-d YYYY-MM-DD|-] [-t YYYY-MM-DD|-]\n";
         } else if (command.rfind("pri ", 0) == 0) {
             int id = 0;
             bool hasPriority = false;
             bool hasDue = false;
+            bool hasTarget = false;
             Priority priority = Priority::Medium;
             std::string due;
+            std::string target;
             std::string error;
-            if (!parseUpdateArgs(command.substr(4), id, hasPriority, priority, hasDue, due, error)) {
+            if (!parseUpdateArgs(command.substr(4), id, hasPriority, priority, hasDue, due,
+                                 hasTarget, target, error)) {
                 std::cout << "Update failed: " << error << "\n";
             } else if (!manager.contains(id)) {
                 std::cout << "Task not found.\n";
             } else {
-                if (hasPriority) manager.setPriority(id, priority);
-                if (hasDue) manager.setDue(id, due);
-                saveTasks(manager, dataPath);
-                manager.show(id);
+                // 先按将要生效的值校验，避免部分修改落盘
+                std::string effectiveDue;
+                std::string effectiveTarget;
+                for (const Task& task : manager.sorted(SortMode::Id)) {
+                    if (task.id == id) {
+                        effectiveDue = task.due;
+                        effectiveTarget = task.target;
+                    }
+                }
+                if (hasDue) effectiveDue = due;
+                if (hasTarget) effectiveTarget = target;
+
+                if (!datesConsistent(effectiveDue, effectiveTarget)) {
+                    std::cout << "Update failed: target completion date must not be later than the due date.\n";
+                } else {
+                    if (hasPriority) manager.setPriority(id, priority);
+                    if (hasDue) manager.setDue(id, due);
+                    if (hasTarget) manager.setTarget(id, target);
+                    saveTasks(manager, dataPath);
+                    manager.show(id);
+                }
             }
         } else if (command == "done" || command == "remove") {
             std::cout << "Usage: " << command << " <id>\n";

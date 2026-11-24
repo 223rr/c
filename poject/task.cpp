@@ -55,12 +55,46 @@ bool compareByDue(const Task& a, const Task& b) {
     return a.id < b.id;
 }
 
+// 备注要压成一行存盘：反斜杠与换行做转义。
+std::string escapeNotes(const std::string& text) {
+    std::string out;
+    out.reserve(text.size() + 8);
+    for (char c : text) {
+        if (c == '\\') out += "\\\\";
+        else if (c == '\n') out += "\\n";
+        else if (c != '\r') out.push_back(c);
+    }
+    return out;
+}
+
+std::string unescapeNotes(const std::string& text) {
+    std::string out;
+    out.reserve(text.size());
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        if (text[i] == '\\' && i + 1 < text.size()) {
+            const char next = text[i + 1];
+            if (next == 'n') { out.push_back('\n'); ++i; continue; }
+            if (next == '\\') { out.push_back('\\'); ++i; continue; }
+        }
+        out.push_back(text[i]);
+    }
+    return out;
+}
+
 std::string formatTask(const Task& task) {
     std::ostringstream out;
     out << task.id << ". [" << (task.done ? "x" : " ") << "] "
         << priorityText(task.priority) << " "
-        << (task.due.empty() ? std::string("-") : task.due) << " "
+        << "目标 " << (task.target.empty() ? std::string("-") : task.target) << " · "
+        << "截止 " << (task.due.empty() ? std::string("-") : task.due) << " "
         << task.title;
+    if (!task.subs.empty()) {
+        std::size_t doneCount = 0;
+        for (const SubTask& sub : task.subs) {
+            if (sub.done) ++doneCount;
+        }
+        out << " (" << doneCount << "/" << task.subs.size() << ")";
+    }
     return out.str();
 }
 
@@ -118,16 +152,32 @@ bool isValidDate(const std::string& text) {
     return day <= limit;
 }
 
-bool TaskManager::add(const std::string& title, Priority priority, const std::string& due) {
+bool datesConsistent(const std::string& due, const std::string& target) {
+    if (due.empty() || target.empty()) return true;
+    return target <= due; // ISO 日期按字典序比较即按时间比较
+}
+
+bool isRepeatValid(const std::string& repeat) {
+    return repeat.empty() || repeat == "daily" || repeat == "weekly" || repeat == "monthly";
+}
+
+bool TaskManager::add(const std::string& title, Priority priority,
+                      const std::string& due, const std::string& target,
+                      const std::string& repeat) {
     const std::string cleaned = trim(title);
     if (cleaned.empty()) return false;
     if (!due.empty() && !isValidDate(due)) return false;
+    if (!target.empty() && !isValidDate(target)) return false;
+    if (!datesConsistent(due, target)) return false;
+    if (!isRepeatValid(repeat)) return false;
 
     Task task;
     task.id = nextId++;
     task.title = cleaned;
     task.priority = priority;
     task.due = due;
+    task.target = target;
+    task.repeat = repeat;
     tasks.push_back(task);
     return true;
 }
@@ -181,11 +231,202 @@ bool TaskManager::markDone(int id) {
     return false;
 }
 
+bool TaskManager::markUndone(int id) {
+    for (auto& task : tasks) {
+        if (task.id == id) {
+            task.done = false;
+            return true;
+        }
+    }
+    return false;
+}
+
 bool TaskManager::remove(int id) {
     for (auto it = tasks.begin(); it != tasks.end(); ++it) {
         if (it->id == id) {
             tasks.erase(it);
+            renumber(); // 删掉后编号重新排成 1..N
             return true;
+        }
+    }
+    return false;
+}
+
+void TaskManager::renumber() {
+    std::stable_sort(tasks.begin(), tasks.end(),
+                     [](const Task& a, const Task& b) { return a.id < b.id; });
+    int next = 1;
+    for (Task& task : tasks) task.id = next++;
+    nextId = next;
+}
+
+bool TaskManager::restore(const Task& task) {
+    Task copy = task;
+    if (find(copy.id) != nullptr) copy.id = nextId; // 编号被占用了就排到末尾
+    tasks.push_back(copy);
+    renumber();
+    return true;
+}
+
+std::size_t TaskManager::removeDone() {
+    const std::size_t before = tasks.size();
+    tasks.erase(std::remove_if(tasks.begin(), tasks.end(),
+                               [](const Task& task) { return task.done; }),
+                tasks.end());
+    const std::size_t removed = before - tasks.size();
+    if (removed) renumber();
+    return removed;
+}
+
+const Task* TaskManager::find(int id) const {
+    for (const Task& task : tasks) {
+        if (task.id == id) return &task;
+    }
+    return nullptr;
+}
+
+bool TaskManager::addSub(int id, const std::string& title) {
+    const std::string cleaned = trim(title);
+    if (cleaned.empty()) return false;
+    for (Task& task : tasks) {
+        if (task.id == id) {
+            task.subs.push_back(SubTask{cleaned, false});
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TaskManager::toggleSub(int id, std::size_t index) {
+    for (Task& task : tasks) {
+        if (task.id == id) {
+            if (index >= task.subs.size()) return false;
+            task.subs[index].done = !task.subs[index].done;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TaskManager::removeSub(int id, std::size_t index) {
+    for (Task& task : tasks) {
+        if (task.id == id) {
+            if (index >= task.subs.size()) return false;
+            task.subs.erase(task.subs.begin() + static_cast<std::ptrdiff_t>(index));
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TaskManager::setNotes(int id, const std::string& notes) {
+    for (Task& task : tasks) {
+        if (task.id == id) {
+            task.notes = notes;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TaskManager::addFile(int id, const std::string& name) {
+    if (name.empty()) return false;
+    for (Task& task : tasks) {
+        if (task.id == id) {
+            for (const std::string& existing : task.files) {
+                if (existing == name) return false; // 重名就不重复挂
+            }
+            task.files.push_back(name);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TaskManager::removeFile(int id, const std::string& name) {
+    for (Task& task : tasks) {
+        if (task.id == id) {
+            for (auto it = task.files.begin(); it != task.files.end(); ++it) {
+                if (*it == name) {
+                    task.files.erase(it);
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+    return false;
+}
+
+bool TaskManager::setRepeat(int id, const std::string& repeat) {
+    if (!isRepeatValid(repeat)) return false;
+    for (Task& task : tasks) {
+        if (task.id == id) {
+            task.repeat = repeat;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TaskManager::setDoneAt(int id, const std::string& date) {
+    if (!date.empty() && !isValidDate(date)) return false;
+    for (Task& task : tasks) {
+        if (task.id == id) {
+            task.doneAt = date;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TaskManager::addSpent(int id, int seconds) {
+    if (seconds <= 0) return false;
+    for (Task& task : tasks) {
+        if (task.id == id) {
+            task.spent += seconds;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TaskManager::setSticker(int id, const std::string& sticker) {
+    for (Task& task : tasks) {
+        if (task.id == id) {
+            task.sticker = sticker;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TaskManager::addTag(int id, const std::string& tag) {
+    const std::string cleaned = trim(tag);
+    if (cleaned.empty()) return false;
+    for (Task& task : tasks) {
+        if (task.id == id) {
+            for (const std::string& existing : task.tags) {
+                if (existing == cleaned) return false; // 已经有这个标签
+            }
+            task.tags.push_back(cleaned);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TaskManager::removeTag(int id, const std::string& tag) {
+    const std::string cleaned = trim(tag);
+    for (Task& task : tasks) {
+        if (task.id == id) {
+            for (auto it = task.tags.begin(); it != task.tags.end(); ++it) {
+                if (*it == cleaned) {
+                    task.tags.erase(it);
+                    return true;
+                }
+            }
+            return false;
         }
     }
     return false;
@@ -205,7 +446,20 @@ bool TaskManager::setDue(int id, const std::string& due) {
     if (!due.empty() && !isValidDate(due)) return false;
     for (auto& task : tasks) {
         if (task.id == id) {
+            if (!datesConsistent(due, task.target)) return false;
             task.due = due;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TaskManager::setTarget(int id, const std::string& target) {
+    if (!target.empty() && !isValidDate(target)) return false;
+    for (auto& task : tasks) {
+        if (task.id == id) {
+            if (!datesConsistent(task.due, target)) return false;
+            task.target = target;
             return true;
         }
     }
@@ -234,10 +488,93 @@ bool TaskManager::load(const std::string& path) {
     if (!in) return false;
 
     std::vector<Task> loaded;
-    int maxId = 0;
     std::string line;
     while (std::getline(in, line)) {
+        // 兼容记事本另存为带 BOM 的 UTF-8 文件
+        if (line.size() >= 3 &&
+            static_cast<unsigned char>(line[0]) == 0xEF &&
+            static_cast<unsigned char>(line[1]) == 0xBB &&
+            static_cast<unsigned char>(line[2]) == 0xBF) {
+            line.erase(0, 3);
+        }
         if (trim(line).empty()) continue;
+
+        // 子任务行： "+ <0|1> <标题>"，挂在上一行任务下
+        if (line.size() > 2 && line[0] == '+' && line[1] == ' ') {
+            if (loaded.empty()) continue;
+            std::string rest = trim(line.substr(2));
+            if (rest.empty()) continue;
+            int subDone = 0;
+            std::istringstream subStream(rest);
+            SubTask sub;
+            if (subStream >> subDone) {
+                std::string subTitle;
+                std::getline(subStream, subTitle);
+                sub.title = trim(subTitle);
+            } else {
+                sub.title = rest; // 没有标记位的老格式
+            }
+            if (sub.title.empty()) continue;
+            sub.done = subDone != 0;
+            loaded.back().subs.push_back(sub);
+            continue;
+        }
+
+        // 备注行： "~ <转义后的多行文本>"
+        if (line.size() > 2 && line[0] == '~' && line[1] == ' ') {
+            if (loaded.empty()) continue;
+            loaded.back().notes = unescapeNotes(line.substr(2));
+            continue;
+        }
+
+        // 附件行： "@ <文件名>"
+        if (line.size() > 2 && line[0] == '@' && line[1] == ' ') {
+            if (loaded.empty()) continue;
+            const std::string name = trim(line.substr(2));
+            if (!name.empty()) loaded.back().files.push_back(name);
+            continue;
+        }
+
+        // 重复规则行： "& daily"
+        if (line.size() > 2 && line[0] == '&' && line[1] == ' ') {
+            if (loaded.empty()) continue;
+            const std::string repeat = trim(line.substr(2));
+            if (isRepeatValid(repeat)) loaded.back().repeat = repeat;
+            continue;
+        }
+
+        // 完成日期行： "^ 2026-11-24"
+        if (line.size() > 2 && line[0] == '^' && line[1] == ' ') {
+            if (loaded.empty()) continue;
+            const std::string date = trim(line.substr(2));
+            if (isValidDate(date)) loaded.back().doneAt = date;
+            continue;
+        }
+
+        // 专注时长行： "$ 1500"
+        if (line.size() > 2 && line[0] == '$' && line[1] == ' ') {
+            if (loaded.empty()) continue;
+            const std::string seconds = trim(line.substr(2));
+            if (!seconds.empty() && seconds.find_first_not_of("0123456789") == std::string::npos) {
+                loaded.back().spent = std::stoi(seconds);
+            }
+            continue;
+        }
+
+        // 贴纸行： "% 🧸"
+        if (line.size() > 2 && line[0] == '%' && line[1] == ' ') {
+            if (loaded.empty()) continue;
+            loaded.back().sticker = trim(line.substr(2));
+            continue;
+        }
+
+        // 标签行： "# 工作"
+        if (line.size() > 2 && line[0] == '#' && line[1] == ' ') {
+            if (loaded.empty()) continue;
+            const std::string tag = trim(line.substr(2));
+            if (!tag.empty()) loaded.back().tags.push_back(tag);
+            continue;
+        }
 
         std::istringstream ss(line);
         Task task;
@@ -255,12 +592,27 @@ bool TaskManager::load(const std::string& path) {
             task.priority = static_cast<Priority>(first[0] - '0');
             const std::size_t afterPriority = pos;
             const std::string second = takeWord(remainder, pos);
+
+            bool hasDue = false;
             if (second == "-") {
-                // 没有截止日期
+                hasDue = true; // 没有截止日期
             } else if (isValidDate(second)) {
+                hasDue = true;
                 task.due = second;
             } else {
                 pos = afterPriority; // 这一段其实是标题开头
+            }
+
+            if (hasDue) {
+                const std::size_t afterDue = pos;
+                const std::string third = takeWord(remainder, pos);
+                if (third == "-") {
+                    // 没有目标完成日
+                } else if (isValidDate(third)) {
+                    task.target = third;
+                } else {
+                    pos = afterDue; // 旧格式没有目标日，这一段是标题
+                }
             }
             task.title = trim(remainder.substr(pos));
         } else {
@@ -268,13 +620,12 @@ bool TaskManager::load(const std::string& path) {
         }
 
         if (task.id <= 0 || task.title.empty()) continue;
-        maxId = std::max(maxId, task.id);
         loaded.push_back(task);
     }
     if (in.bad()) return false;
 
     tasks = std::move(loaded);
-    nextId = maxId + 1;
+    renumber(); // 旧文件里编号可能有空洞，读入后重新排成 1..N
     return true;
 }
 
@@ -285,7 +636,18 @@ bool TaskManager::save(const std::string& path) const {
         out << task.id << " " << (task.done ? 1 : 0) << " "
             << static_cast<int>(task.priority) << " "
             << (task.due.empty() ? std::string("-") : task.due) << " "
+            << (task.target.empty() ? std::string("-") : task.target) << " "
             << task.title << "\n";
+        for (const SubTask& sub : task.subs) {
+            out << "+ " << (sub.done ? 1 : 0) << " " << sub.title << "\n";
+        }
+        if (!task.notes.empty()) out << "~ " << escapeNotes(task.notes) << "\n";
+        for (const std::string& file : task.files) out << "@ " << file << "\n";
+        if (!task.repeat.empty()) out << "& " << task.repeat << "\n";
+        if (!task.doneAt.empty()) out << "^ " << task.doneAt << "\n";
+        if (task.spent > 0) out << "$ " << task.spent << "\n";
+        if (!task.sticker.empty()) out << "% " << task.sticker << "\n";
+        for (const std::string& tag : task.tags) out << "# " << tag << "\n";
     }
     out.flush();
     return static_cast<bool>(out);

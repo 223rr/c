@@ -19,6 +19,12 @@ endif()
 add_executable(task_cli main.cpp)
 target_link_libraries(task_cli PRIVATE task_core)
 
+add_executable(task_server server.cpp)
+target_link_libraries(task_server PRIVATE task_core)
+if(WIN32)
+    target_link_libraries(task_server PRIVATE ws2_32 shell32)
+endif()
+
 enable_testing()
 add_executable(task_tests test.cpp)
 target_link_libraries(task_tests PRIVATE task_core)
